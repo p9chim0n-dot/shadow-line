@@ -3,49 +3,70 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SHADOW LINE: STRATEGY Ver 2.0</title>
+    <title>SHADOW LINE: RECT-GRID</title>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+    <script src="https://unpkg.com/panzoom@9.4.0/dist/panzoom.min.js"></script>
     <style>
         :root { --accent-a: #00aaff; --accent-b: #ff4400; --bg: #050505; }
-        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: #ccc; margin: 0; padding: 0; touch-action: manipulation; overflow: hidden; height: 100vh; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: #ccc; margin: 0; padding: 0; touch-action: none; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         
-        /* 選択画面 */
         .overlay { position: fixed; inset: 0; background: #000; z-index: 2000; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; }
         .setup-btn { width: 100%; max-width: 320px; padding: 15px; margin: 10px; font-size: 16px; border: 1px solid #444; background: #222; color: #fff; cursor: pointer; }
-        .char-grid { width: 100%; max-width: 600px; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 20px 0; overflow-y: auto; }
-        .char-card { background: #111; border: 1px solid #333; padding: 10px; font-size: 12px; cursor: pointer; border-radius: 4px; text-align: left; }
-        .char-card.selected { border-color: #0f0; background: #002200; }
 
         /* ゲームメイン */
-        #game-layout { display: none; flex-direction: column; height: 100vh; }
-        #map-area { flex: 1; position: relative; overflow: hidden; background: radial-gradient(circle, #0a1520 0%, #000 100%); }
-        #game-container { position: absolute; width: 100%; height: 100%; }
+        #game-layout { display: none; flex-direction: column; height: 100vh; width: 100vw; }
+        
+        /* マップエリア：スマホ版はここをドラッグ/ズーム可能にする */
+        #map-viewport { flex: 1; overflow: hidden; position: relative; background: #000; cursor: grab; }
+        #map-viewport:active { cursor: grabbing; }
+
+        #game-container { 
+            display: grid; 
+            gap: 10px; 
+            padding: 40px;
+            transform-origin: 0 0; /* Panzoom用 */
+        }
+
+        /* PC版：横長長方形（10列×3行） */
+        @media (min-width: 768px) {
+            #game-container { 
+                grid-template-columns: repeat(10, 120px); 
+                grid-template-rows: repeat(3, 80px);
+                width: max-content;
+            }
+        }
+
+        /* スマホ版：縦長長方形（3列×10行） */
+        @media (max-width: 767px) {
+            #game-container { 
+                grid-template-columns: repeat(3, 100px); 
+                grid-template-rows: repeat(10, 70px);
+                width: max-content;
+            }
+        }
 
         .station { 
-            position: absolute; width: 65px; height: 35px; font-size: 10px;
-            background: rgba(0,0,0,0.85); border: 1px solid #333;
+            background: rgba(20, 20, 20, 0.9); border: 1px solid #333;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
-            transform: translate(-50%, -50%); border-radius: 4px; color: #aaa;
+            border-radius: 4px; color: #aaa; cursor: pointer; font-size: 12px;
+            position: relative; transition: 0.2s;
         }
-        @media (min-width: 768px) { .station { width: 90px; height: 40px; font-size: 12px; } }
-        .station.selected { border-color: #fff; color: #fff; box-shadow: 0 0 12px #fff; z-index: 100; }
-        .station.blocked { background: #300 !important; border-color: #f00 !important; color: #f44 !important; }
+        .station.selected { border-color: #fff; box-shadow: 0 0 15px #fff; z-index: 10; color: #fff; background: #111; }
+        .station.blocked { background: #300 !important; border-color: #f00 !important; }
 
-        .unit-marker { display: flex; width: 14px; height: 14px; border-radius: 2px; margin: 1px; font-size: 9px; align-items: center; justify-content: center; font-weight: bold; color: #fff; }
+        .unit-marker { display: flex; width: 16px; height: 16px; border-radius: 2px; margin: 1px; font-size: 10px; align-items: center; justify-content: center; font-weight: bold; color: #fff; }
         .u-a { background: var(--accent-a); } .u-b { background: var(--accent-b); }
 
         /* 操作パネル */
-        #controls { background: #111; border-top: 1px solid #333; padding: 10px; }
-        .info-bar { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; font-weight: bold; }
+        #controls { background: #111; border-top: 1px solid #333; padding: 10px; z-index: 100; touch-action: auto; }
         .unit-tabs { display: flex; gap: 4px; margin-bottom: 8px; overflow-x: auto; }
-        .tab { flex: 1; padding: 10px 4px; font-size: 11px; background: #222; border: 1px solid #444; color: #777; white-space: nowrap; }
+        .tab { flex: 1; padding: 12px; font-size: 12px; background: #222; border: 1px solid #444; color: #666; white-space: nowrap; }
         .tab.active { background: #444; color: #fff; border-color: #fff; }
-        .tab.done { opacity: 0.2; text-decoration: line-through; }
+        .tab.done { opacity: 0.2; }
 
         .actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
         @media (max-width: 600px) { .actions { grid-template-columns: repeat(2, 1fr); } }
-        .actions button { padding: 12px; font-size: 13px; font-weight: bold; }
         
         #confirm-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; max-width: 300px; background: #111; border: 2px solid #ffeb3b; padding: 20px; z-index: 3000; display: none; text-align: center; border-radius: 8px; }
     </style>
@@ -54,28 +75,27 @@
 
 <div id="setup-screen" class="overlay">
     <h1 style="color:var(--accent-b)">SHADOW LINE</h1>
-    <button class="setup-btn" onclick="preJoin('捜査官')">捜査官として参加 (4体操作)</button>
-    <button class="setup-btn" onclick="preJoin('爆弾魔')">爆弾魔として参加 (2体操作)</button>
+    <button class="setup-btn" onclick="preJoin('捜査官')">捜査官として参加</button>
+    <button class="setup-btn" onclick="preJoin('爆弾魔')">爆弾魔として参加</button>
 </div>
 
 <div id="char-select-screen" class="overlay" style="display:none;">
     <h2 id="char-title"></h2>
-    <div id="char-list" class="char-grid"></div>
-    <button class="setup-btn" id="start-btn" onclick="finalizeSelection()" style="display:none; border-color:#0f0;">初期配置を完了する</button>
+    <div id="char-list" style="display:grid; grid-template-columns: repeat(2, 1fr); gap:10px; margin:20px;"></div>
+    <button class="setup-btn" id="start-btn" onclick="finalizeSelection()" style="display:none; border-color:#0f0;">配置を完了</button>
 </div>
 
 <div id="confirm-modal">
-    <p id="confirm-text" style="color:#fff; margin-bottom:20px;"></p>
-    <div style="display:flex; gap:10px;">
-        <button onclick="processAction(true)" style="background:#0f0; color:#000; flex:1; padding:12px;">実行</button>
-        <button onclick="processAction(false)" style="background:#555; flex:1; padding:12px;">中止</button>
-    </div>
+    <p id="confirm-text" style="color:#fff;"></p>
+    <div style="display:flex; gap:10px;"><button onclick="processAction(true)" style="background:#0f0; flex:1; padding:12px;">実行</button><button onclick="processAction(false)" style="background:#555; flex:1; padding:12px;">中止</button></div>
 </div>
 
 <div id="game-layout">
-    <div id="map-area"><div id="game-container"></div></div>
+    <div id="map-viewport">
+        <div id="game-container"></div>
+    </div>
     <div id="controls">
-        <div class="info-bar">
+        <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:5px;">
             <div id="turn-msg"></div>
             <div id="scores">A:0 | B:0</div>
         </div>
@@ -85,7 +105,7 @@
 </div>
 
 <script>
-// --- [Firebase Configを貼り付けてください] ---
+// --- [Firebase Config] ---
 const firebaseConfig = {
   apiKey: "AIzaSyCoYzyTFHBNUbo3ZvG3sZFLdW7j0HcD91s",
   authDomain: "shadow-line-game.firebaseapp.com",
@@ -95,47 +115,35 @@ const firebaseConfig = {
   messagingSenderId: "105815703910",
   appId: "1:105815703910:web:dff1c672aa30120b9b88a7"
 };
-// ------------------------------------------
+// -------------------------
 
 firebase.initializeApp(firebaseConfig);
-const db = firebase.database().ref('shadow_line_v2_final');
+const db = firebase.database().ref('shadow_line_v4_zoom');
 
 const STATIONS = ["東刻", "神伝", "電脳街", "御徒原", "上界", "鶯ノ杜", "日暮岬", "西暮", "田瑞", "駒込楼", "巣魔", "大束", "池袋獄", "目白隠", "馬場崎", "新大窪", "潜宿", "代々隅", "原宿層", "渋夜", "恵比州", "目黒界", "反田", "大崎跡", "品河", "高輪門", "田満", "浜松宮", "新破", "有楽庵"];
 
 const ABILITIES = {
-    '捜査官': [
-        {id:1, name:"特急", desc:"移動+2"}, {id:2, name:"予知", desc:"爆弾検知"},
-        {id:3, name:"聞込", desc:"履歴調査"}, {id:4, name:"処理", desc:"耐性あり"},
-        {id:5, name:"覆面", desc:"隠密性"}, {id:6, name:"調査", desc:"逃走方向"}
-    ],
-    '爆弾魔': [
-        {id:1, name:"盗聴", desc:"敵能力把握"}, {id:2, name:"電車", desc:"移動爆弾"},
-        {id:3, name:"手配", desc:"接近検知"}, {id:4, name:"予告", desc:"ダミー通知"}
-    ]
+    '捜査官': [{id:1, name:"特急"}, {id:2, name:"予知"}, {id:3, name:"聞込"}, {id:4, name:"処理"}, {id:5, name:"覆面"}, {id:6, name:"調査"}],
+    '爆弾魔': [{id:1, name:"盗聴"}, {id:2, name:"電車"}, {id:3, name:"手配"}, {id:4, name:"予告"}]
 };
 
-let myRole = null, selectedIds = [], gameState = null, activeIdx = 0, selectedSt = null, pendingAct = null;
+let myRole = null, selectedIds = [], gameState = null, activeIdx = 0, selectedSt = null, pendingAct = null, pz = null;
 
 function preJoin(role) {
     myRole = role;
     document.getElementById('setup-screen').style.display = 'none';
     document.getElementById('char-select-screen').style.display = 'flex';
-    const list = document.getElementById('char-list'); list.innerHTML = "";
+    const list = document.getElementById('char-list');
     const limit = role === '捜査官' ? 4 : 2;
-    document.getElementById('char-title').innerText = `${role} キャラクター選択 (${limit})`;
+    document.getElementById('char-title').innerText = `${role}選択(${limit})`;
 
     ABILITIES[role].forEach(c => {
         const d = document.createElement('div');
-        d.className = 'char-card';
-        d.innerHTML = `<strong>${c.name}</strong><br>${c.desc}`;
+        d.className = 'char-card'; d.style.cssText = "background:#111; border:1px solid #333; padding:10px; cursor:pointer;";
+        d.innerHTML = `<strong>${c.name}</strong>`;
         d.onclick = () => {
-            if(selectedIds.includes(c.id)) {
-                selectedIds = selectedIds.filter(i => i !== c.id);
-                d.classList.remove('selected');
-            } else if(selectedIds.length < limit) {
-                selectedIds.push(c.id);
-                d.classList.add('selected');
-            }
+            if(selectedIds.includes(c.id)) { selectedIds = selectedIds.filter(i => i !== c.id); d.style.borderColor = "#333"; }
+            else if(selectedIds.length < limit) { selectedIds.push(c.id); d.style.borderColor = "#0f0"; }
             document.getElementById('start-btn').style.display = selectedIds.length === limit ? 'block' : 'none';
         };
         list.appendChild(d);
@@ -146,24 +154,25 @@ function finalizeSelection() {
     document.getElementById('char-select-screen').style.display = 'none';
     document.getElementById('game-layout').style.display = 'flex';
     renderMap();
+    // ズーム機能の初期化
+    pz = panzoom(document.getElementById('game-container'), {
+        maxZoom: 2, minZoom: 0.5, bounds: true, boundsPadding: 0.1
+    });
     initSync();
 }
 
 function renderMap() {
     const container = document.getElementById('game-container');
     container.innerHTML = "";
-    const w = container.offsetWidth, h = container.offsetHeight;
-    const rX = Math.min(w, h) * 0.4, rY = Math.min(w, h) * 0.42;
-    const cX = w / 2, cY = h / 2;
-
     STATIONS.forEach((name, i) => {
-        const angle = (i / 30) * Math.PI * 2 - Math.PI / 2;
         const el = document.createElement('div');
         el.className = 'station'; el.id = `st-${i}`;
-        el.style.left = (cX + rX * Math.cos(angle)) + 'px';
-        el.style.top = (cY + rY * Math.sin(angle)) + 'px';
-        el.innerHTML = `<span>${name}</span>`;
-        el.onclick = () => { if(gameState?.turn === myRole) { selectedSt = i; updateUI(); }};
+        el.innerHTML = `<span>${name}</span><div id="m-${i}" style="display:flex; margin-top:4px;"></div>`;
+        el.onclick = (e) => { 
+            // Panzoomのドラッグ中には反応させない
+            if (e.defaultPrevented) return;
+            if(gameState?.turn === myRole) { selectedSt = i; updateUI(); }
+        };
         container.appendChild(el);
     });
 }
@@ -172,32 +181,12 @@ function initSync() {
     db.on('value', snap => {
         const data = snap.val();
         if(!data) {
-            // 初期配置の計算
-            const aPos = [], bPos = [];
-            const used = new Set();
-            
-            // 爆弾魔の配置 (0, 15をベースに調整)
-            while(bPos.length < 2) {
-                let p = Math.floor(Math.random() * 30);
-                if(!used.has(p)) { bPos.push(p); used.add(p); }
-            }
-            // 捜査官の配置 (敵から2駅以上離れる)
-            while(aPos.length < 4) {
-                let p = Math.floor(Math.random() * 30);
-                let farEnough = bPos.every(bp => getDist(p, bp) > 2);
-                if(!used.has(p) && farEnough) { aPos.push(p); used.add(p); }
-            }
-
-            db.set({
-                turn: '爆弾魔', aScore:0, bScore:0, aUnits: aPos, bUnits: bPos,
-                aChars: myRole==='捜査官'?selectedIds:[1,2,3,4],
-                bChars: myRole==='爆弾魔'?selectedIds:[1,2],
-                aDone:[false,false,false,false], bDone:[false,false],
-                bombs:{}, blocked:{}, blockedQueue:[]
-            });
+            let bPos = [], aPos = [], used = new Set();
+            while(bPos.length < 2) { let p = Math.floor(Math.random()*30); if(!used.has(p)){bPos.push(p); used.add(p);}}
+            while(aPos.length < 4) { let p = Math.floor(Math.random()*30); if(!used.has(p) && bPos.every(bp => Math.min(Math.abs(p-bp), 30-Math.abs(p-bp))>2)){aPos.push(p); used.add(p);}}
+            db.set({ turn:'爆弾魔', aScore:0, bScore:0, aUnits:aPos, bUnits:bPos, aChars:myRole==='捜査官'?selectedIds:[1,2,3,4], bChars:myRole==='爆弾魔'?selectedIds:[1,2], aDone:[false,false,false,false], bDone:[false,false], bombs:{}, blocked:{} });
         } else {
             gameState = data;
-            // 自分のキャラ設定を更新
             if(myRole==='捜査官' && !gameState.aChars) db.update({aChars: selectedIds});
             if(myRole==='爆弾魔' && !gameState.bChars) db.update({bChars: selectedIds});
             updateUI();
@@ -207,58 +196,47 @@ function initSync() {
 
 function updateUI() {
     if(!gameState) return;
-    document.getElementById('scores').innerText = `解除:${gameState.aScore} | 爆破:${gameState.bScore}`;
-    const msg = document.getElementById('turn-msg');
-    msg.innerText = gameState.turn === myRole ? "▶ あなたのターン" : "⌛ 相手のターン";
-    msg.style.color = gameState.turn === myRole ? "#0f0" : "#777";
-
-    // ユニット選択タブ (順不同操作のため)
+    document.getElementById('scores').innerText = `解:${gameState.aScore} | 爆:${gameState.bScore}`;
+    document.getElementById('turn-msg').innerText = gameState.turn === myRole ? "▶ 自ターン" : "⌛ 相手待ち";
+    
     const tContainer = document.getElementById('unit-tabs'); tContainer.innerHTML = "";
     const curChars = myRole==='捜査官'?gameState.aChars:gameState.bChars;
     const curDone = myRole==='捜査官'?gameState.aDone:gameState.bDone;
     
     curChars.forEach((id, idx) => {
-        const char = ABILITIES[myRole].find(c => c.id === id);
         const btn = document.createElement('button');
         btn.className = `tab ${activeIdx===idx?'active':''} ${curDone[idx]?'done':''}`;
-        btn.innerText = char.name;
-        btn.onclick = () => { if(gameState.turn === myRole) { activeIdx = idx; updateUI(); }};
+        btn.innerText = ABILITIES[myRole].find(c=>c.id===id).name;
+        btn.onclick = () => { if(gameState.turn===myRole){ activeIdx=idx; updateUI(); }};
         tContainer.appendChild(btn);
     });
 
-    // アクションボタン
     const bContainer = document.getElementById('action-btns'); bContainer.innerHTML = "";
     if(gameState.turn === myRole) {
         const acts = myRole==='捜査官'?["移動","解除","捕縛","封鎖"]:["移動","設置","爆破"];
         acts.forEach(a => {
-            const b = document.createElement('button');
-            b.innerText = a; b.disabled = curDone[activeIdx];
+            const b = document.createElement('button'); b.innerText = a; b.disabled = curDone[activeIdx];
             b.onclick = () => { if(selectedSt!==null || a==="爆破") confirmAct(a); };
             bContainer.appendChild(b);
         });
     }
 
-    // マップ表示の更新
     STATIONS.forEach((name, i) => {
         const el = document.getElementById(`st-${i}`);
         if(!el) return;
         el.className = 'station' + (i===selectedSt?' selected':'') + (gameState.blocked?.[i]?' blocked':'');
-        el.innerHTML = `<span>${name}</span><div id="m-${i}" style="display:flex;justify-content:center;"></div>`;
-        const m = el.querySelector(`#m-${i}`);
-        
+        const m = el.querySelector(`#m-${i}`); m.innerHTML = "";
         gameState.aUnits.forEach((p, idx) => { if(p===i) m.innerHTML += `<div class="unit-marker u-a">${idx+1}</div>`; });
         gameState.bUnits.forEach((p, idx) => { if(p===i) m.innerHTML += `<div class="unit-marker u-b">${idx+1}</div>`; });
-        
-        if(myRole==='爆弾魔' && gameState.bombs?.[i]) el.innerHTML += `<span style="color:#f90;font-size:9px;">💣${gameState.bombs[i]}</span>`;
-        if(myRole==='捜査官' && gameState.aChars?.includes(2) && gameState.bombs?.[i]===1) el.innerHTML += "⚠️";
+        if(myRole==='爆弾魔' && gameState.bombs?.[i]) el.querySelector('span').innerHTML = name + "💣";
     });
 }
 
-function confirmAct(a) {
-    pendingAct = a;
-    const stName = selectedSt !== null ? STATIONS[selectedSt] : "指定なし";
-    document.getElementById('confirm-text').innerText = `${stName}で「${a}」を実行しますか？`;
-    document.getElementById('confirm-modal').style.display = 'block';
+function confirmAct(a) { 
+    pendingAct = a; 
+    const stName = selectedSt !== null ? STATIONS[selectedSt] : "全域";
+    document.getElementById('confirm-text').innerText = `${stName}で「${a}」を実行？`; 
+    document.getElementById('confirm-modal').style.display = 'block'; 
 }
 
 function processAction(yes) {
@@ -266,63 +244,54 @@ function processAction(yes) {
     if(!yes) return;
     let up = JSON.parse(JSON.stringify(gameState));
     const s = selectedSt, cur = (myRole==='捜査官'?up.aUnits:up.bUnits)[activeIdx];
-    let ok = false;
+    let actionResult = "SUCCESS";
 
     if(myRole==='捜査官') {
-        const cid = up.aChars[activeIdx];
         if(pendingAct==="移動") {
-            const r = cid === 1 ? 3 : 1;
-            if(isWithin(cur, s, r) && !up.blocked?.[s]) { up.aUnits[activeIdx] = s; ok = true; }
+            if(isWithin(cur, s, (up.aChars[activeIdx]===1?3:1)) && !up.blocked?.[s]) { up.aUnits[activeIdx]=s; }
+            else { actionResult = "FAILED"; }
         } else if(pendingAct==="解除") {
-            if(s===cur && up.bombs?.[s]) { delete up.bombs[s]; up.aScore++; ok = true; }
+            if(s===cur && up.bombs?.[s]) { delete up.bombs[s]; up.aScore++; }
+            else { actionResult = "FAILED"; }
         } else if(pendingAct==="捕縛") {
-            if(s===cur && up.bUnits.includes(s)) { alert("勝利：爆弾魔を確保しました！"); db.set(null); location.reload(); return; }
-        } else if(pendingAct==="封鎖") {
-            if(!up.blocked) up.blocked = {}; up.blocked[s] = 4; up.blockedQueue.push(s);
-            if(up.blockedQueue.length > 2) delete up.blocked[up.blockedQueue.shift()]; ok = true;
+            if(s===cur && up.bUnits.includes(s)) { alert("捜査官勝利！"); db.set(null); location.reload(); return; }
+            else { actionResult = "FAILED"; }
+        } else if(pendingAct==="封鎖") { 
+            if(!up.blocked) up.blocked={}; up.blocked[s]=4; 
         }
-        if(ok) up.aDone[activeIdx] = true;
+        up.aDone[activeIdx]=true;
     } else {
         if(pendingAct==="移動") {
-            if(isWithin(cur, s, 1) && !up.blocked?.[s]) { up.bUnits[activeIdx] = s; ok = true; }
+            if(isWithin(cur, s, 1) && !up.blocked?.[s]) { up.bUnits[activeIdx]=s; }
+            else { actionResult = "FAILED"; }
         } else if(pendingAct==="設置") {
-            if(s===cur) { if(!up.bombs) up.bombs = {}; up.bombs[s] = 5; ok = true; }
-        } else if(pendingAct==="爆破") {
-            for(let b in up.bombs) if(up.bombs[b] <= 0) {
-                up.bScore++; if(!up.blocked) up.blocked = {}; up.blocked[b] = 4;
-                if(up.aUnits.includes(parseInt(b))) { alert("勝利：捜査官を爆破しました！"); db.set(null); location.reload(); return; }
-                delete up.bombs[b]; ok = true;
+            if(s===cur) { if(!up.bombs) up.bombs={}; up.bombs[s]=5; }
+            else { actionResult = "FAILED"; }
+        } else if(pendingAct==="爆破") { 
+            let hits = false;
+            for(let b in up.bombs) if(up.bombs[b]<=0){ 
+                up.bScore++; 
+                if(up.aUnits.includes(parseInt(b))){alert("爆弾魔勝利！"); db.set(null); location.reload(); return;} 
+                delete up.bombs[b]; hits = true;
             }
+            if(!hits) actionResult = "FAILED";
         }
-        if(ok) up.bDone[activeIdx] = true;
+        up.bDone[activeIdx]=true;
     }
 
-    // ターン終了判定
-    const doneArr = myRole==='捜査官'?up.aDone:up.bDone;
-    if(doneArr.every(d => d)) {
+    if(actionResult === "FAILED") console.log(`${pendingAct} action failed, but action point consumed.`);
+
+    const dArr = myRole==='捜査官'?up.aDone:up.bDone;
+    if(dArr.every(d=>d)) {
         up.turn = myRole==='捜査官'?'爆弾魔':'捜査官';
-        up.aDone = [false,false,false,false]; up.bDone = [false,false];
-        if(up.turn==='捜査官') {
-            for(let b in up.bombs) if(up.bombs[b]>0) up.bombs[b]--;
-            for(let bl in up.blocked) { up.blocked[bl]--; if(up.blocked[bl]<=0) delete up.blocked[bl]; }
-        }
-        activeIdx = 0;
-    } else {
-        // 次の未行動ユニットへ自動切り替え（またはそのまま選択可能）
-        activeIdx = doneArr.findIndex(d => !d);
-    }
-    selectedSt = null;
-    db.set(up);
+        up.aDone=[false,false,false,false]; up.bDone=[false,false];
+        if(up.turn==='捜査官') { for(let b in up.bombs) if(up.bombs[b]>0) up.bombs[b]--; }
+        activeIdx=0;
+    } else { activeIdx = dArr.findIndex(d=>!d); }
+    selectedSt=null; db.set(up);
 }
 
-function getDist(p1, p2) {
-    const d = Math.abs(p1 - p2);
-    return Math.min(d, 30 - d);
-}
-
-function isWithin(p1, p2, r) { 
-    return getDist(p1, p2) <= r && p1 !== p2;
-}
+function isWithin(p1, p2, r) { let d = Math.abs(p1-p2); return Math.min(d, 30-d) <= r && p1!==p2; }
 </script>
 </body>
 </html>
