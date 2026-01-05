@@ -2,68 +2,100 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>SHADOW LINE: ABILITY PROTOCOL - FIXED</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SHADOW LINE: CROSS-PLAY</title>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
     <style>
-        /* スタイル設定はそのまま維持 */
-        body { font-family: 'Courier New', monospace; background: #050505; color: #a0a0a0; display: flex; flex-direction: column; align-items: center; margin: 0; overflow-x: hidden; }
-        #setup-screen, #char-select-screen { position: fixed; inset: 0; background: #000; z-index: 1000; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
-        .setup-btn, .char-btn { width: 320px; padding: 15px; margin: 5px; font-size: 14px; cursor: pointer; border: 1px solid #333; background: #111; color: #fff; text-align: left; }
-        .char-btn.selected { border-color: #00ff00; background: #002200; }
-        #game-layout { display: none; flex-direction: column; gap: 10px; padding: 10px; align-items: center; }
-        #game-container { position: relative; width: 950px; height: 500px; background: radial-gradient(ellipse at center, #0a1018 0%, #000 100%); border-radius: 250px / 140px; border: 1px dashed #444; }
-        .station { position: absolute; width: 90px; height: 35px; border: 1px solid #222; background: rgba(10, 10, 10, 0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 9px; border-radius: 2px; transform: translate(-50%, -50%); cursor: pointer; color: #666; }
-        .station.selected { border: 1px solid #fff; box-shadow: 0 0 10px #fff; z-index: 100; color: #fff; }
-        .station.blocked { border: 1px solid #ff0000; color: #ff4444; background: #200 !important; }
-        .unit-marker { display: inline-block; width: 14px; height: 14px; border-radius: 3px; margin: 1px; font-size: 10px; text-align: center; color: white; font-weight: bold; }
-        .u-a { background: #00aaff; } .u-b { background: #ff4400; }
-        #controls-panel { width: 650px; background: #111; padding: 15px; border: 1px solid #333; text-align: center; }
-        .unit-selector { display: flex; justify-content: center; gap: 5px; margin-bottom: 10px; }
-        .unit-btn { padding: 8px; font-size: 11px; background: #222; border: 1px solid #444; color: #888; cursor: pointer; flex: 1; }
-        .unit-btn.active { background: #444; color: #fff; border-color: #fff; }
-        .unit-btn.done { text-decoration: line-through; opacity: 0.3; }
-        .btn-group { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
-        button { padding: 10px; cursor: pointer; background: #1a1a1a; color: #ccc; border: 1px solid #333; font-size: 12px; }
-        #system-log { width: 650px; height: 70px; background: #000; border: 1px solid #222; margin-top: 5px; padding: 10px; font-size: 11px; overflow-y: auto; text-align: left; color: #4CAF50; }
+        :root { --accent-a: #00aaff; --accent-b: #ff4400; --bg: #050505; --panel-bg: #111; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: #ccc; margin: 0; padding: 0; touch-action: manipulation; overflow: hidden; height: 100vh; }
+        
+        /* ログイン・キャラ選択画面 */
+        .overlay { position: fixed; inset: 0; background: #000; z-index: 2000; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; text-align: center; }
+        .setup-btn { width: 100%; max-width: 320px; padding: 15px; margin: 10px; font-size: 16px; border: 1px solid #444; background: #222; color: #fff; cursor: pointer; }
+        .char-grid { width: 100%; max-width: 600px; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 20px 0; overflow-y: auto; }
+        .char-card { background: #111; border: 1px solid #333; padding: 10px; font-size: 12px; cursor: pointer; border-radius: 4px; }
+        .char-card.selected { border-color: #0f0; background: #002200; }
+
+        /* メインレイアウト */
+        #game-layout { display: none; flex-direction: column; height: 100vh; }
+        
+        /* マップエリア */
+        #map-area { flex: 1; position: relative; overflow: hidden; background: radial-gradient(circle, #0a1520 0%, #000 100%); }
+        #game-container { position: absolute; width: 100%; height: 100%; }
+
+        .station { 
+            position: absolute; width: 70px; height: 35px; font-size: 10px;
+            background: rgba(0,0,0,0.85); border: 1px solid #333;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            transform: translate(-50%, -50%); border-radius: 4px; color: #aaa; transition: 0.2s;
+        }
+        @media (min-width: 768px) { .station { width: 90px; height: 40px; font-size: 12px; } }
+        .station.selected { border-color: #fff; color: #fff; box-shadow: 0 0 12px #fff; z-index: 100; }
+        .station.blocked { background: #300 !important; border-color: #f00 !important; color: #f44 !important; }
+
+        /* ユニットマーカー */
+        .unit-marker { display: inline-flex; width: 14px; height: 14px; border-radius: 2px; margin: 1px; font-size: 10px; align-items: center; justify-content: center; font-weight: bold; color: #fff; }
+        .u-a { background: var(--accent-a); } .u-b { background: var(--accent-b); }
+
+        /* 下部操作パネル */
+        #controls { background: var(--panel-bg); border-top: 1px solid #333; padding: 10px 15px; box-sizing: border-box; }
+        .info-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        #turn-msg { font-weight: bold; font-size: 14px; }
+        .score-box { font-size: 13px; }
+
+        .unit-tabs { display: flex; gap: 5px; margin-bottom: 10px; overflow-x: auto; }
+        .tab { flex: 1; padding: 8px; font-size: 11px; background: #222; border: 1px solid #444; color: #888; white-space: nowrap; }
+        .tab.active { background: #444; color: #fff; border-color: #fff; }
+        .tab.done { opacity: 0.2; text-decoration: line-through; }
+
+        .actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+        @media (max-width: 600px) { .actions { grid-template-columns: repeat(2, 1fr); } }
+        .actions button { padding: 12px 5px; font-size: 13px; font-weight: bold; }
+        
+        /* モーダル */
+        #confirm-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; max-width: 320px; background: #111; border: 2px solid #ffeb3b; padding: 20px; z-index: 3000; display: none; text-align: center; border-radius: 8px; }
     </style>
 </head>
 <body>
 
-    <div id="setup-screen">
-        <h1 style="color: #ff3333; letter-spacing: 5px;">SHADOW LINE: ONLINE</h1>
-        <button class="setup-btn" onclick="preJoin('捜査官')">捜査官として参加</button>
-        <button class="setup-btn" onclick="preJoin('爆弾魔')">爆弾魔として参加</button>
-    </div>
+<div id="setup-screen" class="overlay">
+    <h1 style="color:var(--accent-b); letter-spacing:4px;">SHADOW LINE</h1>
+    <button class="setup-btn" onclick="preJoin('捜査官')" style="border-left:10px solid var(--accent-a)">捜査官で参加</button>
+    <button class="setup-btn" onclick="preJoin('爆弾魔')" style="border-left:10px solid var(--accent-b)">爆弾魔で参加</button>
+</div>
 
-    <div id="char-select-screen" style="display:none;">
-        <h2 id="char-select-title">キャラクター選択</h2>
-        <div id="char-list"></div>
-        <button class="setup-btn" id="start-game-btn" onclick="finalizeSelection()" style="margin-top:20px; text-align:center; border-color:#00ff00; display:none;">作戦開始</button>
-    </div>
+<div id="char-select-screen" class="overlay" style="display:none;">
+    <h2 id="char-title"></h2>
+    <div id="char-list" class="char-grid"></div>
+    <button class="setup-btn" id="start-btn" onclick="finalizeSelection()" style="display:none; border-color:#0f0;">ミッション開始</button>
+</div>
 
-    <div id="confirm-modal" style="position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:#111; border:2px solid #ffeb3b; padding:20px; z-index:2000; display:none; text-align:center;">
-        <p id="confirm-text"></p>
-        <button onclick="processAction(true)" style="background:#00ff00; padding:10px;">実行</button>
-        <button onclick="processAction(false)" style="background:#555; padding:10px; color:white;">中止</button>
+<div id="confirm-modal">
+    <p id="confirm-text" style="color:#fff; margin-bottom:20px;"></p>
+    <div style="display:flex; gap:10px;">
+        <button onclick="processAction(true)" style="background:#0f0; color:#000; flex:1; padding:12px;">決定</button>
+        <button onclick="processAction(false)" style="background:#555; flex:1; padding:12px;">戻る</button>
     </div>
+</div>
 
-    <div id="game-layout">
-        <div id="game-container"></div>
-        <div id="controls-panel">
-            <div id="score-board" style="font-size: 14px; margin-bottom: 10px;">
-                解除: <span id="a-score" style="color:#00aaff">0</span>/5 | 爆破: <span id="b-score" style="color:#ff4400">0</span>/5
+<div id="game-layout">
+    <div id="map-area"><div id="game-container"></div></div>
+    <div id="controls">
+        <div class="info-bar">
+            <div id="turn-msg"></div>
+            <div class="score-box">
+                A: <span id="a-score" style="color:var(--accent-a)">0</span> | 
+                B: <span id="b-score" style="color:var(--accent-b)">0</span>
             </div>
-            <div id="unit-selector" class="unit-selector"></div>
-            <div id="ability-info" style="font-size:11px; color:#ffeb3b; margin-bottom:5px;"></div>
-            <div id="action-buttons" class="btn-group"></div>
-            <div id="turn-info" style="margin-top:10px; font-weight:bold;"></div>
         </div>
-        <div id="system-log"></div>
+        <div id="unit-tabs" class="unit-tabs"></div>
+        <div id="action-btns" class="actions"></div>
     </div>
+</div>
 
 <script>
-// --- [Firebase Configをここに貼り付け] ---
+// --- [Firebase設定] ---
 const firebaseConfig = {
   apiKey: "AIzaSyCoYzyTFHBNUbo3ZvG3sZFLdW7j0HcD91s",
   authDomain: "shadow-line-game.firebaseapp.com",
@@ -73,247 +105,210 @@ const firebaseConfig = {
   messagingSenderId: "105815703910",
   appId: "1:105815703910:web:dff1c672aa30120b9b88a7"
 };
-// -----------------------------------------
+// ----------------------
 
 firebase.initializeApp(firebaseConfig);
-const db = firebase.database().ref('shadow_line_game_v1');
+const db = firebase.database().ref('shadow_line_crossplay_v1');
 
 const STATIONS = ["東刻", "神伝", "電脳街", "御徒原", "上界", "鶯ノ杜", "日暮岬", "西暮", "田瑞", "駒込楼", "巣魔", "大束", "池袋獄", "目白隠", "馬場崎", "新大窪", "潜宿", "代々隅", "原宿層", "渋夜", "恵比州", "目黒界", "反田", "大崎跡", "品河", "高輪門", "田満", "浜松宮", "新破", "有楽庵"];
 
-const CHARS_A = [
-    {id:1, name:"捜査官1", skill:"特急乗車", desc:"移動範囲+2(通行止め不可)"},
-    {id:2, name:"捜査官2", skill:"危険予知", desc:"残り1ターンの爆弾を検知"},
-    {id:3, name:"捜査官3", skill:"聞き込み", desc:"5T以内の爆弾魔通過を調査"},
-    {id:4, name:"捜査官4", skill:"爆弾処理", desc:"爆発を1回耐える"},
-    {id:5, name:"捜査官5", skill:"覆面捜査", desc:"敵の検知スキル無効"},
-    {id:6, name:"捜査官6", skill:"現場調査", desc:"爆破後の敵の移動方向を特定"}
-];
+const ABILITIES = {
+    '捜査官': [
+        {id:1, name:"特急", desc:"移動+2"}, {id:2, name:"予知", desc:"爆弾検知"},
+        {id:3, name:"聞込", desc:"通過履歴"}, {id:4, name:"処理", desc:"1回耐性"},
+        {id:5, name:"覆面", desc:"隠密"}, {id:6, name:"調査", desc:"逃走特定"}
+    ],
+    '爆弾魔': [
+        {id:1, name:"盗聴", desc:"能力把握"}, {id:2, name:"電車", desc:"移動爆弾"},
+        {id:3, name:"手配", desc:"接近感知"}, {id:4, name:"予告", desc:"ダミー通知"}
+    ]
+};
 
-const CHARS_B = [
-    {id:1, name:"爆弾魔1", skill:"捜査盗聴", desc:"敵のアビリティを把握"},
-    {id:2, name:"爆弾魔2", skill:"電車爆弾", desc:"毎ターン移動する爆弾"},
-    {id:3, name:"爆弾魔3", skill:"指名手配", desc:"隣接駅の捜査官を認識"},
-    {id:4, name:"爆弾魔4", skill:"爆破予告", desc:"ダミーの設置通知を送信"}
-];
-
-let myRole = null;
-let selectedCharIds = [];
-let gameState = null;
-let activeUnitIdx = 0;
-let selectedStation = null;
-let pendingAction = null;
+let myRole = null, selectedIds = [], gameState = null, activeIdx = 0, selectedSt = null, pendingAct = null;
 
 function preJoin(role) {
     myRole = role;
     document.getElementById('setup-screen').style.display = 'none';
     document.getElementById('char-select-screen').style.display = 'flex';
-    const list = document.getElementById('char-list');
-    list.innerHTML = "";
-    const pool = role === '捜査官' ? CHARS_A : CHARS_B;
+    const list = document.getElementById('char-list'); list.innerHTML = "";
     const limit = role === '捜査官' ? 4 : 2;
-    document.getElementById('char-select-title').innerText = `${role} キャラ選択 (${limit}体)`;
+    document.getElementById('char-title').innerText = `${role} キャラ選択 (${limit})`;
 
-    pool.forEach(c => {
-        const btn = document.createElement('button');
-        btn.className = 'char-btn';
-        btn.innerHTML = `<strong>${c.name}: ${c.skill}</strong><br><small style="color:#aaa">${c.desc}</small>`;
-        btn.onclick = () => {
-            if(selectedCharIds.includes(c.id)) {
-                selectedCharIds = selectedCharIds.filter(id => id !== c.id);
-                btn.classList.remove('selected');
-            } else if(selectedCharIds.length < limit) {
-                selectedCharIds.push(c.id);
-                btn.classList.add('selected');
+    ABILITIES[role].forEach(c => {
+        const d = document.createElement('div');
+        d.className = 'char-card';
+        d.innerHTML = `<strong>${c.name}</strong><br>${c.desc}`;
+        d.onclick = () => {
+            if(selectedIds.includes(c.id)) {
+                selectedIds = selectedIds.filter(i => i !== c.id);
+                d.classList.remove('selected');
+            } else if(selectedIds.length < limit) {
+                selectedIds.push(c.id);
+                d.classList.add('selected');
             }
-            document.getElementById('start-game-btn').style.display = selectedCharIds.length === limit ? 'block' : 'none';
+            document.getElementById('start-btn').style.display = selectedIds.length === limit ? 'block' : 'none';
         };
-        list.appendChild(btn);
+        list.appendChild(d);
     });
 }
 
 function finalizeSelection() {
     document.getElementById('char-select-screen').style.display = 'none';
     document.getElementById('game-layout').style.display = 'flex';
-    renderMap(); // 先に地図を描画
-    initGameSync(); // その後同期開始
+    renderMap();
+    window.addEventListener('resize', renderMap); // リサイズ時に地図を再描画
+    initSync();
 }
 
 function renderMap() {
     const container = document.getElementById('game-container');
-    container.innerHTML = ""; // 再描画用
+    container.innerHTML = "";
+    const w = container.offsetWidth, h = container.offsetHeight;
+    const rX = Math.min(w, h) * 0.4, rY = Math.min(w, h) * 0.42;
+    const cX = w / 2, cY = h / 2;
+
     STATIONS.forEach((name, i) => {
         const angle = (i / 30) * Math.PI * 2 - Math.PI / 2;
         const el = document.createElement('div');
         el.className = 'station'; el.id = `st-${i}`;
-        el.style.left = (475 + 400 * Math.cos(angle)) + 'px';
-        el.style.top = (250 + 200 * Math.sin(angle)) + 'px';
+        el.style.left = (cX + rX * Math.cos(angle)) + 'px';
+        el.style.top = (cY + rY * Math.sin(angle)) + 'px';
         el.innerHTML = `<span>${name}</span>`;
-        el.onclick = () => { if(gameState && gameState.turn === myRole) { selectedStation = i; updateUI(); }};
+        el.onclick = () => { if(gameState?.turn === myRole) { selectedSt = i; updateUI(); }};
         container.appendChild(el);
     });
+    if(gameState) updateUI();
 }
 
-function initGameSync() {
-    db.on('value', (snapshot) => {
-        const data = snapshot.val();
-        if (!data) {
-            // 最初のプレイヤーがデータを初期化
-            const initialData = {
-                turn: '捜査官', aScore: 0, bScore: 0,
-                aUnits: [0, 1, 2, 3], bUnits: [15, 16],
-                aChars: myRole === '捜査官' ? selectedCharIds : [1, 2, 3, 4],
-                bChars: myRole === '爆弾魔' ? selectedCharIds : [1, 2],
-                aDone: [false, false, false, false], bDone: [false, false],
-                bombs: {}, blocked: {}, blockedQueue: [], lastLog: "SYSTEM ONLINE"
-            };
-            db.set(initialData);
+function initSync() {
+    db.on('value', snap => {
+        const data = snap.val();
+        if(!data) {
+            db.set({
+                turn:'捜査官', aScore:0, bScore:0, aUnits:[0,1,2,3], bUnits:[15,16],
+                aChars: myRole==='捜査官'?selectedIds:[1,2,3,4],
+                bChars: myRole==='爆弾魔'?selectedIds:[1,2],
+                aDone:[false,false,false,false], bDone:[false,false],
+                bombs:{}, blocked:{}, blockedQueue:[]
+            });
         } else {
-            // 2人目以降、または更新時の処理
             gameState = data;
-            // 自分の陣営のキャラデータが未設定なら更新（上書き）
-            if (myRole === '捜査官' && JSON.stringify(gameState.aChars) !== JSON.stringify(selectedCharIds)) {
-                db.update({ aChars: selectedCharIds });
-            } else if (myRole === '爆弾魔' && JSON.stringify(gameState.bChars) !== JSON.stringify(selectedCharIds)) {
-                db.update({ bChars: selectedCharIds });
-            }
+            if(myRole==='捜査官' && !gameState.aChars) db.update({aChars: selectedIds});
+            if(myRole==='爆弾魔' && !gameState.bChars) db.update({bChars: selectedIds});
             updateUI();
         }
     });
 }
 
 function updateUI() {
-    if (!gameState) return;
+    if(!gameState) return;
     document.getElementById('a-score').innerText = gameState.aScore;
     document.getElementById('b-score').innerText = gameState.bScore;
     
-    // UIの各要素を更新
-    const selector = document.getElementById('unit-selector');
-    selector.innerHTML = "";
-    const currentChars = myRole === '捜査官' ? gameState.aChars : gameState.bChars;
-    const currentDone = myRole === '捜査官' ? gameState.aDone : gameState.bDone;
+    const msg = document.getElementById('turn-msg');
+    msg.innerText = gameState.turn === myRole ? "YOUR TURN" : "ENEMY TURN";
+    msg.style.color = gameState.turn === myRole ? "#0f0" : "#888";
+
+    // ユニットタブ
+    const tContainer = document.getElementById('unit-tabs'); tContainer.innerHTML = "";
+    const curChars = myRole==='捜査官'?gameState.aChars:gameState.bChars;
+    const curDone = myRole==='捜査官'?gameState.aDone:gameState.bDone;
     
-    currentChars.forEach((id, idx) => {
-        const pool = myRole === '捜査官' ? CHARS_A : CHARS_B;
-        const charData = pool.find(c => c.id === id) || pool[0];
+    curChars.forEach((id, idx) => {
+        const char = ABILITIES[myRole].find(c => c.id === id);
         const btn = document.createElement('button');
-        btn.className = `unit-btn ${activeUnitIdx === idx ? 'active' : ''} ${currentDone[idx] ? 'done' : ''}`;
-        btn.innerText = charData.skill;
-        btn.onclick = () => { if(!currentDone[idx]) { activeUnitIdx = idx; updateUI(); }};
-        selector.appendChild(btn);
+        btn.className = `tab ${activeIdx===idx?'active':''} ${curDone[idx]?'done':''}`;
+        btn.innerText = char.name;
+        btn.onclick = () => { if(!curDone[idx]) { activeIdx = idx; updateUI(); }};
+        tContainer.appendChild(btn);
     });
 
-    const activeChar = (myRole === '捜査官' ? CHARS_A : CHARS_B).find(c => c.id === currentChars[activeUnitIdx]) || {name:"", skill:""};
-    document.getElementById('ability-info').innerText = `Unit: ${activeChar.name} [${activeChar.skill}]`;
-
-    const btnContainer = document.getElementById('action-buttons');
-    btnContainer.innerHTML = "";
-    if (gameState.turn === myRole) {
-        document.getElementById('turn-info').innerText = "YOUR TURN";
-        document.getElementById('turn-info').style.color = "#00ff00";
-        const actions = myRole === '捜査官' ? ["移動", "爆弾解除", "捕縛実行", "区域封鎖"] : ["移動", "爆弾設置", "遠隔爆破"];
-        actions.forEach(a => {
+    // アクションボタン
+    const bContainer = document.getElementById('action-btns'); bContainer.innerHTML = "";
+    if(gameState.turn === myRole) {
+        const acts = myRole==='捜査官'?["移動","解除","捕縛","封鎖"]:["移動","設置","爆破"];
+        acts.forEach(a => {
             const b = document.createElement('button');
-            b.innerText = a; b.disabled = currentDone[activeUnitIdx];
-            b.onclick = () => { if(selectedStation !== null || a === "遠隔爆破") confirmAction(a); };
-            btnContainer.appendChild(b);
+            b.innerText = a; b.disabled = curDone[activeIdx];
+            b.onclick = () => { if(selectedSt!==null || a==="爆破") confirmAct(a); };
+            bContainer.appendChild(b);
         });
-    } else {
-        document.getElementById('turn-info').innerText = "WAITING FOR ENEMY...";
-        document.getElementById('turn-info').style.color = "#ff3333";
     }
 
-    // 駅の状態反映
+    // マップ更新
     STATIONS.forEach((name, i) => {
         const el = document.getElementById(`st-${i}`);
         if(!el) return;
-        el.className = 'station' + (i === selectedStation ? ' selected' : '') + (gameState.blocked && gameState.blocked[i] ? ' blocked' : '');
-        el.innerHTML = `<span>${name}</span><div id="u-${i}" style="display:flex; gap:2px;"></div>`;
-        const m = el.querySelector(`#u-${i}`);
-
-        if (myRole === '捜査官') {
-            gameState.aUnits.forEach((p, idx) => { if(p===i) m.innerHTML += `<span class="unit-marker u-a">${idx+1}</span>`; });
-            if(gameState.aChars.includes(2)) {
-                for(let b in gameState.bombs) if(gameState.bombs[b] === 1 && b == i) el.innerHTML += "⚠️";
-            }
+        el.className = 'station' + (i===selectedSt?' selected':'') + (gameState.blocked?.[i]?' blocked':'');
+        el.innerHTML = `<span>${name}</span><div id="m-${i}" style="display:flex;flex-wrap:wrap;justify-content:center;"></div>`;
+        const m = el.querySelector(`#m-${i}`);
+        
+        if(myRole==='捜査官') {
+            gameState.aUnits.forEach((p, idx) => { if(p===i) m.innerHTML += `<div class="unit-marker u-a">${idx+1}</div>`; });
+            if(gameState.aChars?.includes(2) && Object.values(gameState.bombs||{}).includes(1) && gameState.bombs[i]===1) el.innerHTML += "⚠️";
         } else {
-            gameState.bUnits.forEach((p, idx) => { if(p===i) m.innerHTML += `<span class="unit-marker u-a" style="background:#444;">?</span>`; }); // 捜査官を薄く表示（爆弾魔視点）
-            gameState.bUnits.forEach((p, idx) => { if(p===i) m.innerHTML += `<span class="unit-marker u-b">${idx+1}</span>`; });
-            for(let b in gameState.bombs) if(b == i) el.innerHTML += `<span style="color:#ffaa00">💣${gameState.bombs[b]}</span>`;
+            gameState.bUnits.forEach((p, idx) => { if(p===i) m.innerHTML += `<div class="unit-marker u-b">${idx+1}</div>`; });
+            if(gameState.bombs?.[i]) el.innerHTML += `<span style="color:#f90;font-size:9px;">💣${gameState.bombs[i]}</span>`;
         }
     });
 }
 
-function confirmAction(action) {
-    pendingAction = action;
-    const targetName = selectedStation !== null ? STATIONS[selectedStation] : "全域";
-    document.getElementById('confirm-text').innerText = `${targetName} で 「${action}」 を実行しますか？`;
+function confirmAct(a) {
+    pendingAct = a;
+    document.getElementById('confirm-text').innerText = `${a}を実行しますか？`;
     document.getElementById('confirm-modal').style.display = 'block';
 }
 
 function processAction(yes) {
     document.getElementById('confirm-modal').style.display = 'none';
     if(!yes) return;
+    let up = JSON.parse(JSON.stringify(gameState));
+    const s = selectedSt, cur = (myRole==='捜査官'?up.aUnits:up.bUnits)[activeIdx];
+    let ok = false;
 
-    let updates = JSON.parse(JSON.stringify(gameState));
-    const s = selectedStation;
-    const charId = (myRole === '捜査官' ? updates.aChars : updates.bChars)[activeUnitIdx];
-    let success = false;
-
-    if (myRole === '捜査官') {
-        const cur = updates.aUnits[activeUnitIdx];
-        if (pendingAction === "移動") {
-            const range = charId === 1 ? 3 : 1;
-            if (isWithin(cur, s, range) && (!updates.blocked || !updates.blocked[s])) { updates.aUnits[activeUnitIdx] = s; success = true; }
-        } else if (pendingAction === "爆弾解除") {
-            if (s === cur && updates.bombs && updates.bombs[s] !== undefined) { delete updates.bombs[s]; updates.aScore++; success = true; }
-        } else if (pendingAction === "捕縛実行") {
-            if (s === cur && updates.bUnits.includes(s)) { alert("VICTORY: 捜査官の勝利！"); db.set(null); location.reload(); return; }
-        } else if (pendingAction === "区域封鎖") {
-            if(!updates.blocked) updates.blocked = {};
-            updates.blocked[s] = 4; updates.blockedQueue.push(s);
-            if(updates.blockedQueue.length > 2) { let old = updates.blockedQueue.shift(); delete updates.blocked[old]; }
-            success = true;
+    if(myRole==='捜査官') {
+        if(pendingAct==="移動") {
+            const r = up.aChars[activeIdx] === 1 ? 3 : 1;
+            if(isWithin(cur, s, r) && !up.blocked?.[s]) { up.aUnits[activeIdx] = s; ok = true; }
+        } else if(pendingAct==="解除") {
+            if(s===cur && up.bombs?.[s]) { delete up.bombs[s]; up.aScore++; ok = true; }
+        } else if(pendingAct==="捕縛") {
+            if(s===cur && up.bUnits.includes(s)) { alert("捜査官の勝利！"); db.set(null); location.reload(); return; }
+        } else if(pendingAct==="封鎖") {
+            if(!up.blocked) up.blocked = {}; up.blocked[s] = 4; up.blockedQueue.push(s);
+            if(up.blockedQueue.length > 2) delete up.blocked[up.blockedQueue.shift()]; ok = true;
         }
-        if(success) updates.aDone[activeUnitIdx] = true;
+        if(ok) up.aDone[activeIdx] = true;
     } else {
-        const cur = updates.bUnits[activeUnitIdx];
-        if (pendingAction === "移動") {
-            if (isWithin(cur, s, 1) && (!updates.blocked || !updates.blocked[s])) { updates.bUnits[activeUnitIdx] = s; success = true; }
-        } else if (pendingAction === "爆弾設置") {
-            if (s === cur) { if(!updates.bombs) updates.bombs = {}; updates.bombs[s] = 5; success = true; }
-        } else if (pendingAction === "遠隔爆破") {
-            let hit = false;
-            for(let b in updates.bombs) if(updates.bombs[b] <= 0) { 
-                updates.bScore++; if(!updates.blocked) updates.blocked = {}; updates.blocked[b] = 4;
-                if(updates.aUnits.includes(parseInt(b))) { alert("VICTORY: 爆弾魔の勝利！"); db.set(null); location.reload(); return; }
-                delete updates.bombs[b]; hit = true;
+        if(pendingAct==="移動") {
+            if(isWithin(cur, s, 1) && !up.blocked?.[s]) { up.bUnits[activeIdx] = s; ok = true; }
+        } else if(pendingAct==="設置") {
+            if(s===cur) { if(!up.bombs) up.bombs = {}; up.bombs[s] = 5; ok = true; }
+        } else if(pendingAct==="爆破") {
+            for(let b in up.bombs) if(up.bombs[b] <= 0) {
+                up.bScore++; if(!up.blocked) up.blocked = {}; up.blocked[b] = 4;
+                if(up.aUnits.includes(parseInt(b))) { alert("爆弾魔の勝利！"); db.set(null); location.reload(); return; }
+                delete up.bombs[b]; ok = true;
             }
-            if(hit) success = true;
         }
-        if(success) updates.bDone[activeUnitIdx] = true;
+        if(ok) up.bDone[activeIdx] = true;
     }
 
-    const currentDone = myRole === '捜査官' ? updates.aDone : updates.bDone;
-    if (currentDone.every(d => d)) {
-        updates.turn = (myRole === '捜査官' ? '爆弾魔' : '捜査官');
-        updates.aDone = [false,false,false,false];
-        updates.bDone = [false,false];
-        if(updates.turn === '捜査官') {
-            for(let b in updates.bombs) if(updates.bombs[b]>0) updates.bombs[b]--;
-            for(let bl in updates.blocked) { updates.blocked[bl]--; if(updates.blocked[bl] <= 0) delete updates.blocked[bl]; }
+    const done = myRole==='捜査官'?up.aDone:up.bDone;
+    if(done.every(d => d)) {
+        up.turn = myRole==='捜査官'?'爆弾魔':'捜査官';
+        up.aDone = [false,false,false,false]; up.bDone = [false,false];
+        if(up.turn==='捜査官') {
+            for(let b in up.bombs) if(up.bombs[b]>0) up.bombs[b]--;
+            for(let bl in up.blocked) { up.blocked[bl]--; if(up.blocked[bl]<=0) delete up.blocked[bl]; }
         }
-        activeUnitIdx = 0;
-    } else {
-        activeUnitIdx = currentDone.findIndex(d => !d);
-    }
-    selectedStation = null;
-    db.set(updates);
+        activeIdx = 0;
+    } else { activeIdx = done.findIndex(d => !d); }
+    selectedSt = null; db.set(up);
 }
 
 function isWithin(p1, p2, r) { 
-    for(let i=1; i<=r; i++) {
-        if(p2 === (p1 - i + 30) % 30 || p2 === (p1 + i) % 30) return true;
-    }
+    for(let i=1; i<=r; i++) if(p2 === (p1-i+30)%30 || p2 === (p1+i)%30) return true;
     return false;
 }
 </script>
